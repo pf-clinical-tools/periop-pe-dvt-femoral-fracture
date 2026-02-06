@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,6 +21,7 @@ button.secondary { background: #fff; color: #0b3c5d; }
 .a { background: #fff3e0; color: #b36b00; border: 1px solid #b36b00; }
 .r { background: #fdecea; color: #a11a1a; border: 1px solid #a11a1a; }
 .dangerNote { color: #a11a1a; font-weight: bold; }
+
 .noticeBox { background: #fdecea; border: 2px solid #a11a1a; border-radius: 10px; padding: 12px; margin: 10px 0 14px 0; }
 .noticeBox b { color: #a11a1a; }
 
@@ -40,11 +42,7 @@ details.info li { margin: 4px 0; }
 fieldset { min-width: 0; }
 
 /* ✅ Centred layout on desktop */
-.container {
-  max-width: 920px;
-  width: 100%;
-  margin: 0 auto;
-}
+.container { max-width: 920px; width: 100%; margin: 0 auto; }
 
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions button { flex: 0 0 auto; }
@@ -66,18 +64,10 @@ fieldset { min-width: 0; }
 .evidTag { font-size:0.85em; opacity:0.85; margin-left:6px; }
 .govSmall { font-size:0.9em; line-height:1.35; color:#222; }
 
-/* Opening tips very small print */
-.smallTip { font-size: 0.68em; line-height: 1.3; color: #444; }
-
 .boxCrimson { background:#fdecef; border:1px solid #c94a5a; border-left:4px solid #b42318; border-radius:12px; padding:12px; margin:10px 0 12px 0; }
 .boxGrey { background:#ffffff; border:1px solid #d0d7de; border-radius:12px; padding:12px; margin:10px 0 12px 0; }
 .boxBlue { background:#eef6ff; border:1px solid #7fb3e6; border-left:4px solid #2f6fb0; border-radius:12px; padding:12px; margin-top:10px; }
 
-/* Force Opening tips to very small print */
-.smallTip { font-size: 0.65em !important; line-height: 1.3 !important; }
-#openingTips, .openingTips { font-size: 0.80em !important; line-height: 1.3 !important; }
-
-/* ✅ Evidence & references – readable, clinician-facing */
 .evidenceBox {
   margin-top: 26px;
   padding: 16px;
@@ -106,6 +96,30 @@ fieldset { min-width: 0; }
 (function(){
   'use strict';
 
+  function qsa(sel){ return document.querySelectorAll(sel); }
+  function qs(sel){ return document.querySelector(sel); }
+
+  window.exclusive = function(group, id){
+    var nodes = qsa('input[data-group="'+group+'"]');
+    for (var i=0;i<nodes.length;i++){
+      if (nodes[i].id !== id) nodes[i].checked = false;
+    }
+  };
+
+  function val(group){
+    var x = qs('input[data-group="'+group+'"]:checked');
+    return x ? x.value : null;
+  }
+
+  function rank(c){
+    if (c==="red") return 2;
+    if (c==="amber") return 1;
+    return 0; // green
+  }
+  function maxColour(a,b){
+    return (rank(a) >= rank(b)) ? a : b;
+  }
+
   function appendPostOpNote(){
     var r = document.getElementById('result');
     var tpl = document.getElementById('postopTemplate');
@@ -121,21 +135,6 @@ fieldset { min-width: 0; }
   function removePostOpNote(){
     var existing = document.getElementById('postopNoteInResult');
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-  }
-
-  function qsa(sel){ return document.querySelectorAll(sel); }
-  function qs(sel){ return document.querySelector(sel); }
-
-  window.exclusive = function(group, id){
-    var nodes = qsa('input[data-group="'+group+'"]');
-    for (var i=0;i<nodes.length;i++){
-      if (nodes[i].id !== id) nodes[i].checked = false;
-    }
-  };
-
-  function val(group){
-    var x = qs('input[data-group="'+group+'"]:checked');
-    return x ? x.value : null;
   }
 
   window.resetAll = function(){
@@ -161,84 +160,154 @@ fieldset { min-width: 0; }
       return;
     }
 
-    // Base overall colour
-    var overall = "green";
-    if (pe==="red" || dvt==="red" || bleed==="red" || restart==="red") overall = "red";
-    else if (pe==="amber" || dvt==="amber" || bleed==="amber" || restart==="amber") overall = "amber";
+    // ----------------------------
+    // 1) TWO-DOMAIN LOGIC (FIX)
+    // ----------------------------
 
-    // ✅ PE + DVT unknown handling:
-    // If DVT anatomy is unknown/pending, never allow an overall GREEN output.
-    if (dvt==="unknown" && overall==="green") overall = "amber";
+    // Thrombotic risk = PE + DVT only
+    var thrombotic = "green";
+    if (pe==="red" || dvt==="red") thrombotic = "red";
+    else if (pe==="amber" || dvt==="amber" || dvt==="unknown") thrombotic = "amber";
 
-    r.className = overall;
+    // Anticoagulation feasibility = bleeding + restart only
+    var feasibility = "green";
+    if (bleed==="red" || restart==="red") feasibility = "red";
+    else if (bleed==="amber" || restart==="amber") feasibility = "amber";
 
-    var lmwhCore =
-      "<li><b>Pre-op LMWH:</b> Last therapeutic dose \u226524h before surgery.</li>" +
-      "<li><b>Post-op LMWH:</b> Half-dose at ~12h \u2192 full dose at ~24h if haemostasis secure.</li>";
+    // Display colour is visual attention cue only (worst of two),
+    // BUT content/mitigations follow the matrix (no domain conflation).
+    var display = maxColour(thrombotic, feasibility);
+    r.className = display;
+
+    // ----------------------------
+    // 2) Shared banners / notes
+    // ----------------------------
 
     var dvtUnknownBanner = "";
     if (dvt === "unknown") {
       dvtUnknownBanner =
         '<div class="boxGrey" style="border-color:#b36b00;background:#fff3e0;margin:10px 0 12px 0;">' +
           '<div class="govSmall">' +
-            '<b>DVT anatomy not yet confirmed:</b> treat as at least <b>intermediate risk</b> until established. ' +
-            'Obtain bilateral lower-limb Doppler ultrasound <b>when feasible</b> to define proximal vs distal anatomy. ' +
-            '<b>Do not delay urgent surgery solely</b> to obtain Dopplers in haemodynamically stable PE unless the result will change management (e.g., mitigation planning).' +
+            '<b>DVT anatomy not yet confirmed:</b> treat as at least <b>intermediate thrombotic risk</b> until established. ' +
+            'Obtain bilateral lower-limb Doppler ultrasound <b>when feasible</b> to define proximal anatomy. ' +
+            '<b>Do not delay urgent surgery solely</b> to obtain Dopplers in haemodynamically stable PE unless the result will change management.' +
           '</div>' +
         '</div>';
     }
 
-    if (overall === "green") {
-      r.innerHTML =
-        '<h2><span class="pill g">GREEN</span> Proceed early</h2>' +
-        '<ul>' +
-        '<li>Proceed to surgery \u226436\u201348h.</li>' +
-        lmwhCore +
-        '<li>No IVC filter indicated.</li>' +
-        '</ul>';
+    var opTriggerBox =
+      '<div class="boxGrey" style="border-color:#0b3c5d;background:#fff;margin:10px 0 12px 0;">' +
+        '<div class="govSmall"><b>Operational MDT review trigger (definition):</b> A predefined point at which the MDT must reassess bleeding and thrombotic risks, document the rationale for ongoing delay or escalation, and confirm the anticoagulation plan. It does <b>not</b> imply a biologically safer time for surgery or a reduction in embolic risk.</div>' +
+      '</div>';
+
+    // Governance-aligned staged strategy text (no “full dose ≤24h default”)
+    var stagedCore =
+      "<li><b>Pre-op:</b> aim for last therapeutic LMWH dose ≥24h before surgery (adjust for renal function/neuraxial technique).</li>" +
+      "<li><b>Post-op (principle):</b> haemostasis-first <b>staged escalation</b> (mechanical measures ± prophylactic/intermediate dosing when safe), with escalation to therapeutic dosing typically later (often ~48–72h) depending on haemostasis and anaesthetic constraints.</li>";
+
+    // ----------------------------
+    // 3) MATRIX OUTPUT (FIX)
+    // ----------------------------
+
+    function pill(c){
+      if (c==="green") return '<span class="pill g">GREEN</span>';
+      if (c==="amber") return '<span class="pill a">AMBER</span>';
+      return '<span class="pill r">RED</span>';
     }
 
-    if (overall === "amber") {
-      r.innerHTML =
-        '<h2><span class="pill a">AMBER</span> Proceed with caution</h2>' +
-        dvtUnknownBanner +
-        '<ul>' +
-        '<li>Target surgery ~48\u201372h if feasible.</li>' +
-        '<li class="small">This timeframe represents a pragmatic compromise between early clot stabilisation and the well-established harms of surgical delay; it is not a recommendation to delay surgery beyond what is clinically necessary.</li>' +
-        lmwhCore +
-        '<li>Enhanced post-op monitoring.</li>' +
-        '</ul>';
-    }
+    // Headline always shows both domains
+    var header =
+      '<h2>' +
+        'Thrombotic risk: ' + pill(thrombotic) +
+        ' &nbsp; | &nbsp; ' +
+        'Anticoagulation feasibility: ' + pill(feasibility) +
+      '</h2>';
 
-    if (overall === "red") {
-      // If DVT is unknown, do NOT present filter consideration as a ready option.
-      // Keep restrictive filter stance: only if proximal DVT is documented + prolonged inability to anticoagulate + very high embolic risk.
-      var ivcText;
-      if (dvt === "unknown") {
-        ivcText =
-          '<li><b>IVC filter:</b> <b>Do not plan routinely.</b> Filter consideration requires <b>documented proximal DVT</b> plus prolonged inability to anticoagulate and unacceptably high embolic risk. ' +
-          'If DVT anatomy is unknown, obtain Dopplers when feasible to establish whether proximal DVT is present.</li>';
-      } else {
-        ivcText =
-          '<li><b>IVC filter (restrictive):</b> Consider a temporary retrievable filter ONLY if ALL apply:' +
+    // Case A: Thrombotic GREEN
+    if (thrombotic === "green") {
+      if (feasibility === "green") {
+        r.innerHTML =
+          header +
+          opTriggerBox +
           '<ul>' +
-          '<li>Documented <b>proximal DVT</b>, AND</li>' +
-          '<li>Therapeutic anticoagulation cannot be resumed within <b>48\u201372h</b>, AND</li>' +
-          '<li>Context (including <b>massive PE</b>) implies unacceptably high embolic risk.</li>' +
+            '<li><b>Proceed to surgery early</b> (aligned to hip fracture standards).</li>' +
+            stagedCore +
+            '<li>No IVC filter indicated.</li>' +
           '</ul>' +
-          '</li>' +
-          '<li><b>Retrieve filter</b> as soon as anticoagulation can be re-established.</li>';
+          dvtUnknownBanner;
+      } else if (feasibility === "amber") {
+        r.innerHTML =
+          header +
+          opTriggerBox +
+          '<ul>' +
+            '<li><b>Proceed early with caution.</b> Thrombotic risk is low, but escalation may need step-up/delay.</li>' +
+            stagedCore +
+            '<li>Enhanced post-op review for haemostasis and escalation timing.</li>' +
+            '<li>No IVC filter indicated.</li>' +
+          '</ul>' +
+          dvtUnknownBanner;
+      } else { // feasibility RED
+        r.innerHTML =
+          header +
+          opTriggerBox +
+          '<div class="boxGrey" style="border-color:#a11a1a;background:#fdecea;margin:10px 0 12px 0;">' +
+            '<div class="govSmall"><b>Interpretation:</b> Thrombotic risk is low, but <b>bleeding/haemostasis constraints</b> mean therapeutic anticoagulation is not expected to be feasible early post-op. This constrains anticoagulation intensity; it does <b>not</b> reclassify thrombotic risk.</div>' +
+          '</div>' +
+          '<ul>' +
+            '<li><b>Proceed to surgery early</b> as clinically safe.</li>' +
+            '<li><b>Bleeding-limited strategy:</b> mechanical measures and haemostasis-focused plan; consider prophylactic/intermediate dosing only when haemostasis and anaesthetic constraints allow.</li>' +
+            '<li><b>MDT documentation:</b> record the constraint and a time-defined reassessment plan.</li>' +
+            '<li><b>IVC filter:</b> not routine; generally <b>not indicated</b> in low thrombotic-risk phenotypes.</li>' +
+          '</ul>' +
+          dvtUnknownBanner;
       }
+    }
 
+    // Case B: Thrombotic AMBER
+    if (thrombotic === "amber") {
+      if (feasibility === "green" || feasibility === "amber") {
+        r.innerHTML =
+          header +
+          opTriggerBox +
+          dvtUnknownBanner +
+          '<ul>' +
+            '<li class="dangerNote">Competing risks: <b>consultant MDT discussion documented</b> (orthopaedics + anaesthesia + peri-op medicine; haematology where indicated).</li>' +
+            '<li><b>Proceed to surgery as early as clinically safe;</b> avoid delays that drift into non-operative care.</li>' +
+            stagedCore +
+            '<li><b>Monitoring plan:</b> agree deterioration triggers and post-op reassessment timing.</li>' +
+          '</ul>';
+      } else { // feasibility RED
+        r.innerHTML =
+          header +
+          opTriggerBox +
+          dvtUnknownBanner +
+          '<div class="boxGrey" style="border-color:#a11a1a;background:#fdecea;margin:10px 0 12px 0;">' +
+            '<div class="govSmall"><b>Interpretation:</b> Thrombotic risk is intermediate, and early therapeutic anticoagulation is unlikely to be feasible. This is a <b>true competing-risk scenario</b> requiring explicit mitigation planning.</div>' +
+          '</div>' +
+          '<ul>' +
+            '<li class="dangerNote">Mandatory senior MDT plan (orthopaedics + anaesthesia + peri-op medicine; haematology/thrombosis input).</li>' +
+            '<li><b>Proceed with surgery</b> as clinically safe, with a defined post-op reassessment schedule.</li>' +
+            '<li><b>Bleeding-limited staged strategy</b> (mechanical measures; prophylactic/intermediate dosing only when safe).</li>' +
+            '<li><b>IVC filter:</b> <b>exceptional only</b> — consider only if <b>documented proximal DVT</b> AND therapeutic anticoagulation is not feasible for a clinically meaningful period (commonly &gt;72h) AND embolic risk is judged unacceptably high, with a retrieval plan.</li>' +
+          '</ul>';
+      }
+    }
+
+    // Case C: Thrombotic RED
+    if (thrombotic === "red") {
       r.innerHTML =
-        '<h2><span class="pill r">RED</span> High risk \u2013 mitigation required</h2>' +
+        header +
+        opTriggerBox +
         dvtUnknownBanner +
-        '<p class="small"><b>Important:</b> Because definitive haemostasis can only be assessed <b>after surgery</b>, IVC filters should <b>not</b> be planned routinely pre-operatively. Filter consideration is reserved for patients in whom early post-operative anticoagulation is <b>unlikely</b> and embolic risk during interruption is <b>unacceptably high</b>.</p>' +
-        '<ul>' + lmwhCore +
-        '<li class="dangerNote">Senior MDT review required.</li>' +
-        ivcText +
-        '</ul>' +
-        '<p class="small"><b>Evidence:</b> ESC / NICE / CHEST guidelines discourage routine filter use when anticoagulation is feasible; PREPIC2 showed no benefit of adding a filter to anticoagulation.</p>';
+        '<div class="boxGrey" style="border-color:#a11a1a;background:#fdecea;margin:10px 0 12px 0;">' +
+          '<div class="govSmall"><b>High thrombotic risk phenotype:</b> RED thrombotic features drive RED-level mitigations regardless of bleeding band. Consider HDU/ICU readiness where appropriate.</div>' +
+        '</div>' +
+        '<ul>' +
+          '<li class="dangerNote">Senior MDT review required (orthopaedics + anaesthesia + peri-op medicine; haematology/thrombosis input).</li>' +
+          '<li><b>Proceed to surgery only when clinically safe</b> with an agreed monitoring and escalation plan.</li>' +
+          stagedCore +
+          '<li><b>IVC filter:</b> <b>not routine</b>; consider only under restrictive criteria (documented proximal DVT, prolonged inability to anticoagulate, unacceptably high embolic risk, and a retrieval plan).</li>' +
+        '</ul>';
     }
 
     appendPostOpNote();
@@ -277,11 +346,10 @@ fieldset { min-width: 0; }
     </div>
   </div>
 
-  <!-- ✅ NEW neutral (non-red) timing principle box -->
   <div class="boxGrey" role="note" aria-label="Surgical timing principle">
     <div class="govSmall">
       <strong>Surgical timing principle:</strong><br>
-      Proceed to surgery as early as clinically safe. In haemodynamically stable pulmonary embolism, this may include surgery within approximately <strong>48–72 hours</strong> after initiation of anticoagulation when earlier surgery is not feasible.
+      Proceed to surgery as early as clinically safe. “48–72 hours” (if referenced) is an <strong>operational MDT review trigger</strong>, not a biological safety cut-off.
     </div>
   </div>
 
@@ -310,16 +378,6 @@ fieldset { min-width: 0; }
     </div>
   </div>
 
-  <!-- Opening tips removed safely (commented out; no shared styles touched)
-  <div class="boxGrey" role="note" aria-label="Opening tips">
-    <div class="small" style="font-size:0.80em; line-height:1.3; margin-top:10px;">
-      <b style="font-size:0.80em;">Opening tips:</b>
-      If your organisation uses “protected view” or an in-app preview that blocks scripts,
-      open the HTML in the full browser (Edge/Chrome/Safari) or host it on your intranet.
-    </div>
-  </div>
-  -->
-
   <fieldset>
     <legend>1) PE severity</legend>
     <details class="info">
@@ -347,16 +405,16 @@ fieldset { min-width: 0; }
       <summary>ⓘ What qualifies as GREEN / AMBER / RED?</summary>
       <div class="small">
         <ul>
-          <li><b>GREEN:</b> No DVT, OR isolated distal (calf) DVT.</li>
-          <li><b>AMBER:</b> <b>Documented</b> proximal DVT (popliteal/femoral) with interruption expected to be short (typically ≤48h) and early post-op restart feasible.</li>
-          <li><b>RED:</b> <b>Documented</b> extensive proximal / iliofemoral DVT, or situation where interruption is expected to be prolonged (&gt;48–72h) with high concern for propagation/embolisation during interruption.</li>
+          <li><b>GREEN:</b> <b>No proximal DVT detected on standard CUS</b> (distal calf veins not routinely assessed in standard pathways unless whole-leg ultrasound is requested).</li>
+          <li><b>AMBER:</b> <b>Documented</b> proximal DVT (popliteal/femoral) with interruption expected to be short and early post-op escalation feasible.</li>
+          <li><b>RED:</b> <b>Documented</b> extensive proximal / iliofemoral DVT, or situation where interruption is expected to be prolonged with high concern for propagation/embolisation during interruption.</li>
           <li><b>UNKNOWN:</b> DVT status not yet imaged / anatomy not confirmed.</li>
         </ul>
       </div>
     </details>
 
     <label><input type="checkbox" data-group="dvt" id="dvt_g" value="green" onclick="exclusive('dvt','dvt_g')">
-      <span class="pill g">GREEN</span> No DVT or distal-only DVT</label>
+      <span class="pill g">GREEN</span> No proximal DVT detected on CUS (distal not routinely assessed)</label>
 
     <label><input type="checkbox" data-group="dvt" id="dvt_a" value="amber" onclick="exclusive('dvt','dvt_a')">
       <span class="pill a">AMBER</span> Proximal DVT, short interruption expected</label>
@@ -374,9 +432,9 @@ fieldset { min-width: 0; }
       <summary>ⓘ What qualifies as GREEN / AMBER / RED?</summary>
       <div class="small">
         <ul>
-          <li><b>GREEN:</b> Expected secure haemostasis; low likelihood of major post-op bleeding or re-operation; therapeutic anticoagulation typically restartable within ~24h if needed.</li>
-          <li><b>AMBER:</b> Moderate bleeding concern; anticoagulation restart may need caution/step-up dosing or delayed escalation; closer post-op monitoring required.</li>
-          <li><b>RED:</b> High bleeding risk (e.g., major haemorrhage concern, difficult haemostasis, high likelihood of re-operation/ongoing bleeding); therapeutic anticoagulation unlikely to be safe ≤72h.</li>
+          <li><b>GREEN:</b> Expected secure haemostasis; low likelihood of major post-op bleeding or re-operation.</li>
+          <li><b>AMBER:</b> Moderate bleeding concern; escalation may need step-up dosing or delayed escalation; closer post-op monitoring required.</li>
+          <li><b>RED:</b> High bleeding risk (e.g., difficult haemostasis, high likelihood of re-operation/ongoing bleeding); therapeutic anticoagulation unlikely to be safe early post-op.</li>
         </ul>
       </div>
     </details>
@@ -389,23 +447,24 @@ fieldset { min-width: 0; }
   </fieldset>
 
   <fieldset>
-    <legend>4) Post-op LMWH restart feasibility</legend>
+    <legend>4) Post-op anticoagulation escalation feasibility</legend>
     <details class="info">
       <summary>ⓘ What qualifies as GREEN / AMBER / RED?</summary>
       <div class="small">
         <ul>
-          <li><b>GREEN:</b> Full therapeutic dose expected to be feasible ≤24h post-op (haemostasis secure; no active bleeding; surgical team comfortable to restart).</li>
-          <li><b>AMBER:</b> Full therapeutic dose expected to be feasible 24–48h post-op (likely secure haemostasis but caution/step-up dosing or delayed escalation needed).</li>
-          <li><b>RED:</b> Full therapeutic dose not expected to be feasible ≤72h (ongoing bleeding risk, surgical concerns, drains/ooze, re-operation risk). This is the key trigger for MDT mitigation planning.</li>
+          <li><b>GREEN:</b> Staged escalation expected to be feasible early post-op once haemostasis secure (full-dose within 24h is <b>not</b> assumed as default).</li>
+          <li><b>AMBER:</b> Escalation likely delayed or step-up required; therapeutic dosing may not be feasible until ~24–72h depending on haemostasis/anaesthetic constraints.</li>
+          <li><b>RED:</b> Therapeutic dosing not expected to be feasible for a prolonged period (commonly &gt;72h). This is an operational trigger for senior MDT mitigation planning.</li>
+          <li class="small"><b>Governance note:</b> This category reflects bleeding and procedural constraints, not thrombotic risk severity, and functions as an operational MDT trigger.</li>
         </ul>
       </div>
     </details>
     <label><input type="checkbox" data-group="restart" id="rs_g" value="green" onclick="exclusive('restart','rs_g')">
-      <span class="pill g">GREEN</span> Full dose ≤24h feasible</label>
+      <span class="pill g">GREEN</span> Staged escalation feasible (full-dose &lt;24h not default)</label>
     <label><input type="checkbox" data-group="restart" id="rs_a" value="amber" onclick="exclusive('restart','rs_a')">
-      <span class="pill a">AMBER</span> Full dose 24–48h</label>
+      <span class="pill a">AMBER</span> Escalation delayed / step-up likely</label>
     <label><input type="checkbox" data-group="restart" id="rs_r" value="red" onclick="exclusive('restart','rs_r')">
-      <span class="pill r">RED</span> Full dose not feasible ≤72h</label>
+      <span class="pill r">RED</span> Therapeutic dosing unlikely early post-op (commonly &gt;72h) — MDT trigger</label>
   </fieldset>
 
   <div class="actions">
@@ -431,17 +490,31 @@ fieldset { min-width: 0; }
     </details>
 
     <details>
-      <summary>Core references (key guidance & trials)</summary>
+      <summary>Core references (key guidance &amp; trials)</summary>
       <ol>
         <li>Konstantinides SV, Meyer G, Becattini C, et al. 2019 ESC Guidelines for the diagnosis and management of acute pulmonary embolism. <em>Eur Heart J</em> 2020;41:543–603.</li>
-        <li>Ortel TL, Neumann I, Ageno W, et al. Antithrombotic therapy for VTE disease: CHEST guideline and expert panel report. <em>Chest</em> 2021;160:e545–e608.</li>
-        <li>National Institute for Health and Care Excellence. Venous thromboembolic diseases (NG158). London: NICE; 2020.</li>
-        <li>Witt DM, Nieuwlaat R, Clark NP, et al. American Society of Hematology 2018 guidelines for management of venous thromboembolism: optimal management of anticoagulation therapy. <em>Blood Adv</em> 2018;2(22):3257–3291.</li>
+        <li>Stevens SM, Woller SC, Baumann Kreuziger L, et al. Antithrombotic Therapy for VTE Disease: Second Update of the CHEST Guideline and Expert Panel Report. <em>Chest</em> 2021;160(6):e545–e608.</li>
         <li>Douketis JD, Spyropoulos AC, Murad MH, et al. Perioperative management of antithrombotic therapy. <em>Chest</em> 2022;162:e207–e243.</li>
+        <li>National Institute for Health and Care Excellence. Hip fracture: management (CG124). NICE; 2011.</li>
+        <li>National Hip Fracture Database. Best Practice Tariff (BPT) User Guide (surgery within 36 hours to start of anaesthesia).</li>
+        <li>National Institute for Health and Care Excellence. Venous thromboembolic diseases (NG158). NICE; 2020.</li>
+        <li>Witt DM, Nieuwlaat R, Clark NP, et al. American Society of Hematology 2018 guidelines for management of venous thromboembolism: optimal management of anticoagulation therapy. <em>Blood Adv</em> 2018;2(22):3257–3291.</li>
         <li>Mismetti P, Laporte S, Pellerin O, et al. Effect of a retrievable inferior vena cava filter plus anticoagulation vs anticoagulation alone (PREPIC2). <em>JAMA</em> 2015;313:1627–1635.</li>
         <li>Kim HC, Park JH, Song JM, et al. Safety of early orthopedic surgery in patients with intermediate/low- or low-risk pulmonary embolism. <em>J Thorac Dis</em> 2020;12(3):232–239. doi:10.21037/jtd.2020.01.54.</li>
         <li>Simunovic N, Devereaux PJ, Sprague S, et al. Effect of early surgery after hip fracture on mortality and complications. <em>CMAJ</em> 2010;182:1609–1616.</li>
-        <li>Moja L, Piatti A, Pecoraro V, et al. Timing matters in hip fracture surgery: patients operated within 48 hours have better outcomes. <em>PLoS One</em> 2012;7(10):e46175. doi:10.1371/journal.pone.0046175.</li>
+        <li>Moja L, Piatti A, Pecoraro V, et al. Timing matters in hip fracture surgery. <em>PLoS One</em> 2012;7(10):e46175. doi:10.1371/journal.pone.0046175.</li>
+      </ol>
+    </details>
+
+    <details>
+      <summary>Additional governance-linked references (used for framing/constraints)</summary>
+      <ol>
+        <li>Johansen A, et al. Understanding mortality rates after hip fracture repair using ASA physical status (NHFD analysis). <em>Anaesthesia</em> 2017. PMID:28585391.</li>
+        <li>Loggers SAI, Willems HC, Van Balen R, et al. Quality of life after nonoperative or operative management of proximal femoral fractures in frail institutionalized older adults (FRAIL-HIP). <em>JAMA Surg</em> 2022. PMID:35234817.</li>
+        <li>Kietaibl S, Ferrandis R, Godier A, et al. ESAIC/ESRA regional anaesthesia guideline. <em>Eur J Anaesthesiol</em> 2022;39(2):100–132.</li>
+        <li>Chernysh IN, Mukhopadhyay S, Johnson TA, et al. Time-dependent ultrastructural changes during venous thrombogenesis and thrombus resolution. <em>J Thromb Haemost</em> 2024;22(6):1675–1688. PMID:38492853.</li>
+        <li>PREPIC Study Group. Eight-year follow-up of patients with permanent vena cava filters. <em>Circulation</em> 2005;112:416–422.</li>
+        <li>US Food and Drug Administration. Removing retrievable inferior vena cava filters: FDA safety communication. 2014.</li>
       </ol>
     </details>
 
@@ -455,11 +528,8 @@ fieldset { min-width: 0; }
         <li>Spyropoulos AC, Douketis JD. How I treat anticoagulated patients undergoing an elective procedure. <em>Blood</em> 2012;120:2954–2962.</li>
         <li>Bates SM, Jaeschke R, Stevens SM, et al. Diagnosis of deep vein thrombosis. <em>Chest</em> 2012;141:e351S–e418S.</li>
         <li>Hull RD, Raskob GE, Rosenbloom D, et al. Heparin versus low-molecular-weight heparin for acute deep vein thrombosis. <em>N Engl J Med</em> 1992;326:975–982.</li>
-        <li>PREPIC Study Group. Eight-year follow-up of patients with permanent vena cava filters. <em>Circulation</em> 2005;112:416–422.</li>
-        <li>US Food and Drug Administration. Removing retrievable inferior vena cava filters: FDA safety communication. 2014.</li>
         <li>British Thoracic Society. Guideline for the initial outpatient management of pulmonary embolism. <em>Thorax</em> 2018;73:ii1–ii29.</li>
-        <li>Royal College of Physicians. <em>National Hip Fracture Database annual report</em>. London: RCP.</li>
-        <li>Elkbuli A, Eily A, Polcz V, et al. Isolated hip fracture in the elderly and time to surgery: is there an outcome difference? <em>Trauma Surg Acute Care Open</em> 2018;3(1):e000212. doi:10.1136/tsaco-2018-000212.</li>
+        <li>Elkbuli A, Eily A, Polcz V, et al. Isolated hip fracture in the elderly and time to surgery. <em>Trauma Surg Acute Care Open</em> 2018;3(1):e000212. doi:10.1136/tsaco-2018-000212.</li>
       </ol>
     </details>
 
@@ -475,11 +545,11 @@ fieldset { min-width: 0; }
 <div id="postopTemplate" class="hidden">
   <div class="boxBlue" role="note" aria-label="Post-operative anticoagulation resumption note">
     <div class="govSmall">
-      <strong>Post-operative anticoagulation resumption (high-risk VTE):</strong>
-      Early post-operative anticoagulation is important once haemostasis is secure.
+      <strong>Post-operative anticoagulation (principle):</strong>
+      Early anticoagulation is important once haemostasis is secure.
       <strong>Some peri-operative protocols use staged dose escalation</strong>
-      (for example, intermediate-dose LMWH at approximately 12 hours, progressing to full therapeutic dosing at ≥24 hours)
-      where bleeding risk is acceptable and haemostasis is confirmed in conjunction with the surgical team.
+      (e.g., prophylactic/intermediate dosing first, progressing to therapeutic dosing later)
+      depending on haemostasis and anaesthetic constraints, in conjunction with the surgical team.
       <span class="evidTag">[Evidence-informed | Protocol-dependent | Requires surgical confirmation]</span>
     </div>
   </div>
